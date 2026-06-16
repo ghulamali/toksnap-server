@@ -1,20 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '0d68429dbfmsh6622338ff42ce1cp1a0a4bjsne9f8a332646f';
 
 app.get('/download', async (req, res) => {
   const { url } = req.query;
-
   if (!url) {
     return res.status(400).json({ success: false, error: 'No URL provided' });
   }
-
   try {
     const response = await axios.get(
       'https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/index',
@@ -22,20 +18,20 @@ app.get('/download', async (req, res) => {
         params: { url: url },
         headers: {
           'X-RapidAPI-Key': RAPIDAPI_KEY,
-          'X-RapidAPI-Host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com'
+          'X-RapidAPI-Host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'TokSnap-Server/1.1.0'
         }
       }
     );
-
     const d = response.data;
-
     if (!d || !d.video || d.video.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Video not found or is private'
       });
     }
-
     res.json({
       success:     true,
       title:       d.description?.[0]   || 'TikTok Video',
@@ -48,9 +44,10 @@ app.get('/download', async (req, res) => {
       videoid:     d.videoid?.[0]       || '',
       region:      d.region?.[0]        || ''
     });
-
   } catch (error) {
     console.error('ERROR:', error.message);
+    console.error('ERROR DETAILS:', JSON.stringify(error.response?.data));
+    console.error('ERROR HEADERS SENT:', JSON.stringify(error.config?.headers));
     res.status(500).json({
       success: false,
       error: 'Failed to fetch video. ' + error.message,
@@ -59,8 +56,51 @@ app.get('/download', async (req, res) => {
   }
 });
 
+// Proxy endpoint to download video/audio files through our server
+// This avoids CORS and WebView fetch restrictions when fetching
+// directly from TikTok's CDN inside the Capacitor WebView.
+app.get('/proxy-download', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ success: false, error: 'No URL provided' });
+  }
+  try {
+    const response = await axios.get(url, {
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36',
+        'Referer': 'https://www.tiktok.com/'
+      },
+      maxRedirects: 5
+    });
+
+    res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    response.data.pipe(res);
+
+    response.data.on('error', (err) => {
+      console.error('Stream error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Stream failed' });
+      }
+    });
+  } catch (error) {
+    console.error('PROXY ERROR:', error.message);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to proxy download. ' + error.message
+      });
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'TokSnap server is running', version: '1.0.0' });
+  res.json({ status: 'TokSnap server is running', version: '1.1.0' });
 });
 
 const PORT = process.env.PORT || 3000;
