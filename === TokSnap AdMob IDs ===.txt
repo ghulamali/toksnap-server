@@ -1,0 +1,14 @@
+=== TokSnap AdMob IDs ===
+
+App ID:
+ca-app-pub-5646497988035668~4771996477
+
+Banner Ad Unit ID:
+ca-app-pub-5646497988035668/7291077550
+
+Interstitial Ad Unit ID:
+ca-app-pub-5646497988035668/1092500711
+
+
+Rewarded Ad Unit ID:
+ca-app-pub-5646497988035668/6068766278
